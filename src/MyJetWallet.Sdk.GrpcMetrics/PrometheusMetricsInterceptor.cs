@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Grpc.Core.Interceptors;
+using OpenTelemetry.Trace;
 using Prometheus;
 
 namespace MyJetWallet.Sdk.GrpcMetrics
@@ -88,9 +91,12 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
                         return resp;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         ServerGrpcCallOutCount.WithLabels(HostName, controller, method, "exception").Inc();
+                        Activity.Current?.RecordException(ex);
+                        if (request != null)
+                            Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
                         throw;
                     }
                 }
@@ -117,9 +123,12 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
                         return resp;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "exception").Inc();
+                        Activity.Current?.RecordException(ex);
+                        if (request != null)
+                            Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
                         throw;
                     }
                 }
@@ -166,9 +175,12 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
                 return resp;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "exception").Inc();
+                Activity.Current?.RecordException(ex);
+                if (request != null)
+                    Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
                 throw;
             }
         }
