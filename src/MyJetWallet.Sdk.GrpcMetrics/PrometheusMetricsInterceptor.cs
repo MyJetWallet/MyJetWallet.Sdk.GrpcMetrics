@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -12,6 +13,14 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 {
     public class PrometheusMetricsInterceptor : Interceptor
     {
+        public static string AppName { get; set; }
+        public static string AppVersion { get; set; }
+        public static string AppHost { get; set; }
+
+        public const string GrpcSourceAppNameHeader = "source-app-name";
+        public const string GrpcSourceAppVersionHeader = "source-app-name";
+        public const string GrpcSourceAppHostHeader = "source-app-name";
+        
         private static Counter ServerGrpcCallInCount = Prometheus.Metrics
             .CreateCounter("jet_grpc_server_call_in_count",
                 "Counter of calls grpc methods. Counter applied before execute logic",
@@ -61,12 +70,20 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                     Buckets = new double[] { double.PositiveInfinity }
                 });
 
-        private static string HostName;
+        private static readonly string HostName;
 
         static PrometheusMetricsInterceptor()
         {
-            var defaultName = Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-            HostName = Environment.GetEnvironmentVariable("HOST") ?? defaultName;
+            var name = Assembly.GetEntryAssembly()?.GetName();
+
+            AppName = name?.Name ?? "--none--";
+            AppVersion = name?.Version?.ToString();
+            
+            HostName = Environment.GetEnvironmentVariable("HOST") 
+                        ?? Environment.GetEnvironmentVariable("HOSTNAME") 
+                        ?? AppName;
+
+            AppHost = HostName;
         }
 
         public override async Task<TResponse> UnaryServerHandler<TRequest, TResponse>(TRequest request,
@@ -76,6 +93,14 @@ namespace MyJetWallet.Sdk.GrpcMetrics
             var method = context.Method;
             var prm = context.Method.Split('/');
             var controller = prm.Length >= 2 ? prm[1] : "unknown";
+
+            var sourceAppName = context.RequestHeaders?.Get(GrpcSourceAppHostHeader)?.Value ?? "-none-";
+            var sourceAppVersion = context.RequestHeaders?.Get(GrpcSourceAppVersionHeader)?.Value ?? "-none-";
+            var sourceAppHost = context.RequestHeaders?.Get(GrpcSourceAppHostHeader)?.Value ?? "-none-";
+
+            Activity.Current?.AddTag("call-source-AppName", sourceAppName);
+            Activity.Current?.AddTag("call-source-AppVersion", sourceAppVersion);
+            Activity.Current?.AddTag("call-source-AppAppHost", sourceAppHost);
 
             using (ServerGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress())
             {
@@ -108,6 +133,10 @@ namespace MyJetWallet.Sdk.GrpcMetrics
         {
             var method = context.Method.Name;
             var controller = context.Method.ServiceName;
+            
+            context.Options.Headers?.Add(GrpcSourceAppNameHeader, AppName);
+            context.Options.Headers?.Add(GrpcSourceAppVersionHeader, AppVersion);
+            context.Options.Headers?.Add(GrpcSourceAppHostHeader, AppHost);
 
             using (ClientGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress())
             {
@@ -140,6 +169,10 @@ namespace MyJetWallet.Sdk.GrpcMetrics
         {
             var method = context.Method.Name;
             var controller = context.Method.ServiceName;
+            
+            context.Options.Headers?.Add(GrpcSourceAppNameHeader, AppName);
+            context.Options.Headers?.Add(GrpcSourceAppVersionHeader, AppVersion);
+            context.Options.Headers?.Add(GrpcSourceAppHostHeader, AppHost);
 
             var clientGrpcCallProcessCount = ClientGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress();
 
