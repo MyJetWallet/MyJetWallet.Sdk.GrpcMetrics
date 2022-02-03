@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTelemetry" Version="1.2.0-rc1" />
+    <PackageReference Include="OpenTelemetry" Version="1.2.0-rc2" />
     <PackageReference Include="prometheus-net" Version="5.0.2" />
     <PackageReference Include="protobuf-net.Grpc" Version="1.0.152" />
     <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="6.0.0" />
