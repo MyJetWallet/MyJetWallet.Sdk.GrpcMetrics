@@ -20,54 +20,54 @@ namespace MyJetWallet.Sdk.GrpcMetrics
         public const string GrpcSourceAppNameHeader = "source-app-name";
         public const string GrpcSourceAppVersionHeader = "source-app-name";
         public const string GrpcSourceAppHostHeader = "source-app-name";
-        
+
         private static Counter ServerGrpcCallInCount = Prometheus.Metrics
             .CreateCounter("jet_grpc_server_call_in_count",
                 "Counter of calls grpc methods. Counter applied before execute logic",
-                new CounterConfiguration { LabelNames = new[] { "host", "controller", "method" } });
+                new CounterConfiguration {LabelNames = new[] {"host", "controller", "method"}});
 
         private static Counter ServerGrpcCallOutCount = Prometheus.Metrics
             .CreateCounter("jet_grpc_server_call_out_count",
                 "Counter of calls grpc methods. Counter applied after execute logic",
-                new CounterConfiguration { LabelNames = new[] { "host", "controller", "method", "status" } });
+                new CounterConfiguration {LabelNames = new[] {"host", "controller", "method", "status"}});
 
         private static readonly Gauge ServerGrpcCallProcessCount = Prometheus.Metrics
             .CreateGauge("jet_grpc_server_call_process_count",
                 "Counter of active calls of grpc methods.",
-                new GaugeConfiguration { LabelNames = new[] { "host", "controller", "method" } });
+                new GaugeConfiguration {LabelNames = new[] {"host", "controller", "method"}});
 
         private static readonly Histogram ServerGrpcCallDelaySec = Prometheus.Metrics
             .CreateHistogram("jet_grpc_server_call_delay_sec",
                 "Histogram of grpc call delay in second.",
                 new HistogramConfiguration
                 {
-                    LabelNames = new[] { "host", "controller", "method" },
-                    Buckets = new double[] { double.PositiveInfinity }
+                    LabelNames = new[] {"host", "controller", "method"},
+                    Buckets = new double[] {double.PositiveInfinity}
                 });
 
 
         private static Counter ClientGrpcCallInCount = Prometheus.Metrics
             .CreateCounter("jet_grpc_client_call_in_count",
                 "Counter of calls grpc methods. Counter applied before execute logic",
-                new CounterConfiguration { LabelNames = new[] { "host", "controller", "method" } });
+                new CounterConfiguration {LabelNames = new[] {"host", "controller", "method"}});
 
         private static Counter ClientGrpcCallOutCount = Prometheus.Metrics
             .CreateCounter("jet_grpc_client_call_out_count",
                 "Counter of calls grpc methods. Counter applied after execute logic",
-                new CounterConfiguration { LabelNames = new[] { "host", "controller", "method", "status" } });
+                new CounterConfiguration {LabelNames = new[] {"host", "controller", "method", "status"}});
 
         private static readonly Gauge ClientGrpcCallProcessCount = Prometheus.Metrics
             .CreateGauge("jet_grpc_client_call_process_count",
                 "Counter of active calls of grpc methods.",
-                new GaugeConfiguration { LabelNames = new[] { "host", "controller", "method" } });
+                new GaugeConfiguration {LabelNames = new[] {"host", "controller", "method"}});
 
         private static readonly Histogram ClientGrpcCallDelaySec = Prometheus.Metrics
             .CreateHistogram("jet_grpc_client_call_delay_sec",
                 "Histogram of grpc call delay in second.",
                 new HistogramConfiguration
                 {
-                    LabelNames = new[] { "host", "controller", "method" },
-                    Buckets = new double[] { double.PositiveInfinity }
+                    LabelNames = new[] {"host", "controller", "method"},
+                    Buckets = new double[] {double.PositiveInfinity}
                 });
 
         private static readonly string HostName;
@@ -78,10 +78,10 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
             AppName = name?.Name ?? "--none--";
             AppVersion = name?.Version?.ToString();
-            
-            HostName = Environment.GetEnvironmentVariable("HOST") 
-                        ?? Environment.GetEnvironmentVariable("HOSTNAME") 
-                        ?? AppName;
+
+            HostName = Environment.GetEnvironmentVariable("HOST")
+                       ?? Environment.GetEnvironmentVariable("HOSTNAME")
+                       ?? AppName;
 
             AppHost = HostName;
         }
@@ -104,16 +104,20 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
             using (ServerGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress())
             {
-                using (ServerGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer())
+                using (var serverGrpcCallDelaySec =
+                       ServerGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer())
                 {
                     ServerGrpcCallInCount.WithLabels(HostName, controller, method).Inc();
 
                     try
                     {
                         var resp = await continuation(request, context);
+                        var elapsed = serverGrpcCallDelaySec.ObserveDuration();
 
-                        ServerGrpcCallOutCount.WithLabels(HostName, controller, method, context.Status.StatusCode.ToString()).Inc();
-
+                        ServerGrpcCallOutCount
+                            .WithLabels(HostName, controller, method, context.Status.StatusCode.ToString()).Inc();
+                        GrpcMetricsManager.HandleSuccessfulRequestServer(sourceAppName, sourceAppVersion, method,
+                            controller, elapsed);
                         return resp;
                     }
                     catch (Exception ex)
@@ -122,25 +126,30 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                         Activity.Current?.RecordException(ex);
                         if (request != null)
                             Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
+
+                        GrpcMetricsManager.HandleFailedRequestServer(sourceAppName, sourceAppVersion, method,
+                            controller);
                         throw;
                     }
                 }
             }
         }
 
-        public override TResponse BlockingUnaryCall<TRequest, TResponse>(TRequest request, ClientInterceptorContext<TRequest, TResponse> context,
+        public override TResponse BlockingUnaryCall<TRequest, TResponse>(TRequest request,
+            ClientInterceptorContext<TRequest, TResponse> context,
             BlockingUnaryCallContinuation<TRequest, TResponse> continuation)
         {
             var method = context.Method.Name;
             var controller = context.Method.ServiceName;
-            
+
             context.Options.Headers?.Add(GrpcSourceAppNameHeader, AppName);
             context.Options.Headers?.Add(GrpcSourceAppVersionHeader, AppVersion);
             context.Options.Headers?.Add(GrpcSourceAppHostHeader, AppHost);
 
             using (ClientGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress())
             {
-                using (ClientGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer())
+                using (var clientGrpcCallDelaySec =
+                       ClientGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer())
                 {
                     ClientGrpcCallInCount.WithLabels(HostName, controller, method).Inc();
 
@@ -150,6 +159,9 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
                         ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "success").Inc();
 
+                        var elapsed = clientGrpcCallDelaySec.ObserveDuration();
+                        GrpcMetricsManager.HandleSuccessfulRequestClient(AppName, AppVersion, method, controller,
+                            elapsed);
                         return resp;
                     }
                     catch (Exception ex)
@@ -158,23 +170,27 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                         Activity.Current?.RecordException(ex);
                         if (request != null)
                             Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
+
+                        GrpcMetricsManager.HandleFailedRequestClient(AppName, AppVersion, method, controller);
                         throw;
                     }
                 }
             }
         }
 
-        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(TRequest request, ClientInterceptorContext<TRequest, TResponse> context,
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(TRequest request,
+            ClientInterceptorContext<TRequest, TResponse> context,
             AsyncUnaryCallContinuation<TRequest, TResponse> continuation)
         {
             var method = context.Method.Name;
             var controller = context.Method.ServiceName;
-            
+
             context.Options.Headers?.Add(GrpcSourceAppNameHeader, AppName);
             context.Options.Headers?.Add(GrpcSourceAppVersionHeader, AppVersion);
             context.Options.Headers?.Add(GrpcSourceAppHostHeader, AppHost);
 
-            var clientGrpcCallProcessCount = ClientGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress();
+            var clientGrpcCallProcessCount =
+                ClientGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress();
 
             var clientGrpcCallDelaySec = ClientGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer();
 
@@ -182,6 +198,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
             try
             {
+                var elapsed = clientGrpcCallDelaySec.ObserveDuration();
                 var resp = continuation(request, context);
 
                 resp.ResponseAsync.ContinueWith(task =>
@@ -198,14 +215,15 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                     {
                         status = "unknown";
                     }
+
                     ClientGrpcCallOutCount.WithLabels(HostName, controller, method, status).Inc();
                 });
 
-                resp.ResponseAsync.ContinueWith(task =>
-                {
-                    ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "exception").Inc();
-                }, TaskContinuationOptions.NotOnFaulted);
+                resp.ResponseAsync.ContinueWith(
+                    task => { ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "exception").Inc(); },
+                    TaskContinuationOptions.NotOnFaulted);
 
+                GrpcMetricsManager.HandleSuccessfulRequestClient(AppName, AppVersion, method, controller, elapsed);
                 return resp;
             }
             catch (Exception ex)
@@ -214,6 +232,8 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                 Activity.Current?.RecordException(ex);
                 if (request != null)
                     Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
+
+                GrpcMetricsManager.HandleFailedRequestClient(AppName, AppVersion, method, controller);
                 throw;
             }
         }
