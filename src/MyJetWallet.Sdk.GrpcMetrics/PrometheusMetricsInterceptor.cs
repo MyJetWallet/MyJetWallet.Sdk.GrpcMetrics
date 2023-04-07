@@ -104,8 +104,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics
 
             using (ServerGrpcCallProcessCount.WithLabels(HostName, controller, method).TrackInProgress())
             {
-                using (var serverGrpcCallDelaySec =
-                       ServerGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer())
+                using (var serverGrpcCallDelaySec = ServerGrpcCallDelaySec.Labels(HostName, controller, method).NewTimer())
                 {
                     ServerGrpcCallInCount.WithLabels(HostName, controller, method).Inc();
 
@@ -160,7 +159,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                         ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "success").Inc();
 
                         var elapsed = clientGrpcCallDelaySec.ObserveDuration();
-                        GrpcMetricsManager.HandleSuccessfulRequestClient(AppName, AppVersion, method, controller,
+                        GrpcMetricsManager.HandleSuccessfulRequestClient(HostName, AppVersion, method, controller,
                             elapsed);
                         return resp;
                     }
@@ -171,7 +170,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                         if (request != null)
                             Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
 
-                        GrpcMetricsManager.HandleFailedRequestClient(AppName, AppVersion, method, controller);
+                        GrpcMetricsManager.HandleFailedRequestClient(HostName, AppVersion, method, controller);
                         throw;
                     }
                 }
@@ -223,7 +222,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                     task => { ClientGrpcCallOutCount.WithLabels(HostName, controller, method, "exception").Inc(); },
                     TaskContinuationOptions.NotOnFaulted);
 
-                GrpcMetricsManager.HandleSuccessfulRequestClient(AppName, AppVersion, method, controller, elapsed);
+                GrpcMetricsManager.HandleSuccessfulRequestClient(HostName, AppVersion, method, controller, elapsed);
                 return resp;
             }
             catch (Exception ex)
@@ -233,7 +232,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics
                 if (request != null)
                     Activity.Current?.AddTag("grpc-request", JsonSerializer.Serialize(request));
 
-                GrpcMetricsManager.HandleFailedRequestClient(AppName, AppVersion, method, controller);
+                GrpcMetricsManager.HandleFailedRequestClient(HostName, AppVersion, method, controller);
                 throw;
             }
         }
