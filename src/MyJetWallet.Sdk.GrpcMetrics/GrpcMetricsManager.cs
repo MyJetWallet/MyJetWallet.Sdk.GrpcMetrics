@@ -6,6 +6,7 @@ namespace MyJetWallet.Sdk.GrpcMetrics;
 
 public static class GrpcMetricsManager
 {
+    public static object _gate = new();
     public static readonly Dictionary<string, Metric> ServiceMetrics = new();
     public static readonly Dictionary<string, Metric> ClientMetrics = new();
 
@@ -16,32 +17,35 @@ public static class GrpcMetricsManager
     {
         try
         {
-            if (ClientMetrics.TryGetValue(GetKey(clientName, method), out var metric))
+            lock (_gate)
             {
-                metric.LastRequestTime = DateTime.UtcNow;
-                metric.RequestCount++;
-                metric.AvgTimeInSec =
-                    (metric.AvgTimeInSec * (metric.RequestCount - 1) + executionTime.TotalSeconds) /
-                    metric.RequestCount;
-            }
-            else
-            {
-                metric = new Metric
+                if (ClientMetrics.TryGetValue(GetKey(clientName, method), out var metric))
                 {
-                    OwnerName = GetOwner(),
-                    ServiceName = clientName,
-                    Version = version,
-                    MethodName = method,
-                    ControllerName = controller,
-                    FirstRequestTime = DateTime.UtcNow,
-                    LastRequestTime = DateTime.UtcNow,
-                    RequestCount = 1,
-                    ErrorCount = 0,
-                    AvgTimeInSec = executionTime.TotalSeconds
-                };
-            }
+                    metric.LastRequestTime = DateTime.UtcNow;
+                    metric.RequestCount++;
+                    metric.AvgTimeInSec =
+                        (metric.AvgTimeInSec * (metric.RequestCount - 1) + executionTime.TotalSeconds) /
+                        metric.RequestCount;
+                }
+                else
+                {
+                    metric = new Metric
+                    {
+                        OwnerName = GetOwner(),
+                        ServiceName = clientName,
+                        Version = version,
+                        MethodName = method,
+                        ControllerName = controller,
+                        FirstRequestTime = DateTime.UtcNow,
+                        LastRequestTime = DateTime.UtcNow,
+                        RequestCount = 1,
+                        ErrorCount = 0,
+                        AvgTimeInSec = executionTime.TotalSeconds
+                    };
+                }
 
-            ClientMetrics[GetKey(clientName, method)] = metric;
+                ClientMetrics[GetKey(clientName, method)] = metric;
+            }
         }
         catch (Exception e)
         {
@@ -53,30 +57,33 @@ public static class GrpcMetricsManager
     {
         try
         {
-            if (ClientMetrics.TryGetValue(GetKey(clientName, method), out var metric))
+            lock (_gate)
             {
-                metric.LastRequestTime = DateTime.UtcNow;
-                metric.RequestCount++;
-                metric.ErrorCount++;
-            }
-            else
-            {
-                metric = new Metric
+                if (ClientMetrics.TryGetValue(GetKey(clientName, method), out var metric))
                 {
-                    OwnerName = GetOwner(),
-                    ServiceName = clientName,
-                    Version = version,
-                    MethodName = method,
-                    ControllerName = controller,
-                    FirstRequestTime = DateTime.UtcNow,
-                    LastRequestTime = DateTime.UtcNow,
-                    RequestCount = 1,
-                    ErrorCount = 1,
-                    AvgTimeInSec = 0
-                };
-            }
+                    metric.LastRequestTime = DateTime.UtcNow;
+                    metric.RequestCount++;
+                    metric.ErrorCount++;
+                }
+                else
+                {
+                    metric = new Metric
+                    {
+                        OwnerName = GetOwner(),
+                        ServiceName = clientName,
+                        Version = version,
+                        MethodName = method,
+                        ControllerName = controller,
+                        FirstRequestTime = DateTime.UtcNow,
+                        LastRequestTime = DateTime.UtcNow,
+                        RequestCount = 1,
+                        ErrorCount = 1,
+                        AvgTimeInSec = 0
+                    };
+                }
 
-            ClientMetrics[GetKey(clientName, method)] = metric;
+                ClientMetrics[GetKey(clientName, method)] = metric;
+            }
         }
         catch (Exception e)
         {
@@ -89,32 +96,35 @@ public static class GrpcMetricsManager
     {
         try
         {
-            if (ServiceMetrics.TryGetValue(GetKey(service, method), out var metric))
+            lock (_gate)
             {
-                metric.LastRequestTime = DateTime.UtcNow;
-                metric.RequestCount++;
-                metric.AvgTimeInSec =
-                    ((metric.AvgTimeInSec * (metric.RequestCount - 1) + executionTime.TotalSeconds) /
-                     metric.RequestCount);
-            }
-            else
-            {
-                metric = new Metric
+                if (ServiceMetrics.TryGetValue(GetKey(service, method), out var metric))
                 {
-                    OwnerName = GetOwner(),
-                    ServiceName = service,
-                    Version = version,
-                    MethodName = method,
-                    ControllerName = controller,
-                    FirstRequestTime = DateTime.UtcNow,
-                    LastRequestTime = DateTime.UtcNow,
-                    RequestCount = 1,
-                    ErrorCount = 0,
-                    AvgTimeInSec = executionTime.TotalSeconds
-                };
-            }
+                    metric.LastRequestTime = DateTime.UtcNow;
+                    metric.RequestCount++;
+                    metric.AvgTimeInSec =
+                        ((metric.AvgTimeInSec * (metric.RequestCount - 1) + executionTime.TotalSeconds) /
+                         metric.RequestCount);
+                }
+                else
+                {
+                    metric = new Metric
+                    {
+                        OwnerName = GetOwner(),
+                        ServiceName = service,
+                        Version = version,
+                        MethodName = method,
+                        ControllerName = controller,
+                        FirstRequestTime = DateTime.UtcNow,
+                        LastRequestTime = DateTime.UtcNow,
+                        RequestCount = 1,
+                        ErrorCount = 0,
+                        AvgTimeInSec = executionTime.TotalSeconds
+                    };
+                }
 
-            ServiceMetrics[GetKey(service, method)] = metric;
+                ServiceMetrics[GetKey(service, method)] = metric;
+            }
         }
         catch (Exception e)
         {
@@ -126,30 +136,33 @@ public static class GrpcMetricsManager
     {
         try
         {
-            if (ServiceMetrics.TryGetValue(GetKey(service, method), out var metric))
+            lock (_gate)
             {
-                metric.LastRequestTime = DateTime.UtcNow;
-                metric.RequestCount++;
-                metric.ErrorCount++;
-            }
-            else
-            {
-                metric = new Metric
+                if (ServiceMetrics.TryGetValue(GetKey(service, method), out var metric))
                 {
-                    OwnerName = GetOwner(),
-                    ServiceName = service,
-                    Version = version,
-                    MethodName = method,
-                    ControllerName = controller,
-                    FirstRequestTime = DateTime.UtcNow,
-                    LastRequestTime = DateTime.UtcNow,
-                    RequestCount = 1,
-                    ErrorCount = 1,
-                    AvgTimeInSec = 0
-                };
-            }
+                    metric.LastRequestTime = DateTime.UtcNow;
+                    metric.RequestCount++;
+                    metric.ErrorCount++;
+                }
+                else
+                {
+                    metric = new Metric
+                    {
+                        OwnerName = GetOwner(),
+                        ServiceName = service,
+                        Version = version,
+                        MethodName = method,
+                        ControllerName = controller,
+                        FirstRequestTime = DateTime.UtcNow,
+                        LastRequestTime = DateTime.UtcNow,
+                        RequestCount = 1,
+                        ErrorCount = 1,
+                        AvgTimeInSec = 0
+                    };
+                }
 
-            ServiceMetrics[GetKey(service, method)] = metric;
+                ServiceMetrics[GetKey(service, method)] = metric;
+            }
         }
         catch (Exception e)
         {
